@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-interface Data {
+export interface Data {
     logNum: number;
     level: number;
     dateTime: string;

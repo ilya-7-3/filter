@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  OutlinedInput,
     Paper, 
     Table, 
     TableBody, 
@@ -17,6 +18,7 @@ import { useDatalog } from './TableDataProvider/useDatalog';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import CloseIcon from '@mui/icons-material/Close';
 import Toolbar from '@mui/material/Toolbar';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
@@ -27,16 +29,10 @@ import Button from '@mui/material/Button';
 import filters from './filter'
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
+import Checkbox from '@mui/material/Checkbox';
+import {Data} from './TableDataProvider/useDatalog'
 
 
-interface Data {
-  logNum: number;
-  level: number;
-  dateTime: string;
-  target: string;
-  source: string;
-  description: string;
-}
 
 interface Column {
   id: keyof Data;
@@ -163,18 +159,28 @@ export function TableEventLog() {
   const [orderBy, setOrderBy] = React.useState<keyof Data>('dateTime');
   const [showFilter,setShowFilter] = React.useState(false);
   const [filterBy, setFilterBy] = React.useState('');
-  const [filterMethod, setFilterMethod] = React.useState('');
   const [dateStart, setDateStart] =React.useState("");
   const [dateEnd, setDateEnd] =React.useState("");
-  const [filterValue, setFilterValue] =React.useState('');
+  const [filterValue, setFilterValue] = React.useState<string[]>([]);
   const [arrayFilters, setArrayFilters] = React.useState<any>([]);
   const rows = useDatalog();
-  const [tableElements, setTableElements] = React.useState([]);
+  const [tableElements, setTableElements] = React.useState<Data[]>([]);
   const error = !tableElements.length && arrayFilters.length ? true : false;
+  const levels = ['Ошибка','Предупреждение','Уведомление'];
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
-  console.log('error',error)
+
+  React.useEffect(()=>{
+   arrayFilters.forEach((el:any)=>{
+     if(Object.keys(el)[0] === 'level'){     
+       setFilterValue([...el.level]);                                                
+     }
+   })
+   if(!arrayFilters.length) setFilterValue([])
+  },[filterBy,arrayFilters])
+  React.useEffect(()=>setTableElements([...rows.data]),[rows.data]);
+
   const handleChangeShowFilter = () => {
     if(!showFilter) filterClear()
     setShowFilter(!showFilter)
@@ -185,25 +191,23 @@ export function TableEventLog() {
     let map = new Map();
     const spliceArray = arrayFilters.map((a:any) => ({...a}));
     arrayFilters.forEach((el:any,index:number)=>{
-      if(Object.keys(el)[0] === filterMethod && Object.keys(el)[0] === 'Interval'){
+      if(Object.keys(el)[0] === filterBy ){
         spliceArray.splice(index,1)                                                         
       }
     })
     
-    map.set(filterMethod, !filterValue? [dateStart,dateEnd]:filterValue);
+    map.set(filterBy, filterBy==='Date'? [dateStart,dateEnd]:filterValue);
     const array = rows.data;
     const newArrayFilters = [...spliceArray, Object.fromEntries(map.entries())]; 
     setArrayFilters([...newArrayFilters]);
-    setTableElements(filters(array as never[],dateStart,dateEnd,filterValue,[...newArrayFilters]));
+    setTableElements(filters(array,[...newArrayFilters]));
   }
   console.log('tableElements', tableElements)
   console.log('arrayFilters', arrayFilters)
 
   const filterClear  = () =>{
     setFilterBy('');
-    setFilterMethod('');
-    setFilterValue('');
-    setDateStart('')
+    setDateStart('');
     setDateEnd('');
   }
   
@@ -212,24 +216,38 @@ export function TableEventLog() {
     setFilterBy(event.target.value as string);
   };
 
-  const handleChangeFilterMethod = (event: SelectChangeEvent) => {
-    setFilterMethod(event.target.value as string);
-  };
-  const handleChangeFilterValue = (e: SelectChangeEvent) => {
-    setFilterValue(e.target.value as string);
+  const handleChangeFilterValue = (event: SelectChangeEvent<typeof filterValue>) => {
+    const {
+      target: { value },
+    } = event;
+    setFilterValue(
+      typeof value === 'string' ? value.split(',') : value,
+    );
   };
  
   const handleChangeDateStart = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDateStart(e.target.value);
   };
+
   const handleChangeDateEnd = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDateEnd(e.target.value);
   };
- const  handleDelete = (index:number) => {
+
+ const  handleDelete = (filterColumn:string,index:number, indexLevel:number=0) => {
   const spliceArray = arrayFilters.map((a:any) => ({...a}));
-  spliceArray.splice(index,1)
+  if(filterColumn === 'Date'){
+    spliceArray.splice(index,1)
+  }
+  if(filterColumn === 'level'){
+    if(arrayFilters[index].level.length === 1){
+      spliceArray.splice(index,1)   
+    }
+    else{
+      spliceArray[index].level.splice(indexLevel,1)
+    }
+  }
    setArrayFilters(spliceArray) 
-   setTableElements(filters(rows.data as  never[],dateStart,dateEnd,filterValue,[...spliceArray]));
+   setTableElements(filters(rows.data,[...spliceArray]));
   };
   
   const handleRequestSort = (
@@ -259,26 +277,40 @@ export function TableEventLog() {
       justifyContent:'end'}}>
         <Tooltip title="Filter list">
         <IconButton onClick={handleChangeShowFilter}>
-        <FilterListIcon/>
+        {showFilter ? <CloseIcon/> : <FilterListIcon/>}
         </IconButton>
         </Tooltip>
         </Toolbar>
         <Box sx={{display:'flex',
                   justifyContent:'end'}}>
           {arrayFilters.length ? 
-                arrayFilters.map((el:any,index:number)=>{
-                  return(
-                    <Chip key={index}
-                    sx={{marginRight:'5px'}}
-                    label={
-                    <Box sx={{marginTop:'3px',
-                    display:'flex',
-                    alignItems:'center'}}>
-                      <span>{Object.keys(el)[0]}</span>
-                      <span> {Object.keys(el)[0]==='Interval' ? `_${el.Interval[0]}  ${el.Interval[1]} ` :iconImages[Object.values(el)[0] as number- 1]}</span>
-                    </Box>}
-                    onDelete={()=>handleDelete(index)}  />
-                  )
+                arrayFilters.map((el:any,index:number)=>{             
+                    return(
+                      <div key={index}>
+                      {Object.keys(el)[0]==='Date'?
+                        <Chip key={index}
+                        sx={{marginRight:'5px'}}
+                        label={
+                        <Box sx={{marginTop:'3px',
+                        display:'flex',
+                        alignItems:'center'}}>
+                            <span> {`${el.Date[0]? `C ${el.Date[0].replace('T',' ')}` :''}  ${el.Date[1]? `По ${el.Date[1].replace('T',' ')}`:''} ` }</span>
+                        </Box>}
+                        onDelete={()=>handleDelete(Object.keys(el)[0],index)}  />:
+                        el.level.map((element:any,indexlevel:number)=>{
+                           return( <Chip key={Number(element)}
+                            sx={{marginRight:'5px'}}
+                            label={
+                            <Box sx={{marginTop:'3px',
+                            display:'flex',
+                            alignItems:'center'}}>
+                              <span> {iconImages[element-1]}</span>
+                            </Box>}
+                            onDelete={()=>handleDelete(Object.keys(el)[0],index,indexlevel)}  />)
+                        })
+                      }
+                      </div>   
+                    )
                 }) :''
             }
         </Box>
@@ -310,36 +342,9 @@ export function TableEventLog() {
         >
           <MenuItem value={'Date'}>Дате</MenuItem>
           <MenuItem value={'level'}>Уровню</MenuItem>
-          <MenuItem value={''}>Объекту</MenuItem>
-          <MenuItem value={''}>Источнику</MenuItem>
-          <MenuItem value={''}>Описанию</MenuItem>
         </Select>
         </Box>
-        <Box>      
-                <InputLabel id="demo-simple-select-label">Метод фильтрации</InputLabel>
-                    <Select 
-                    sx={{width:'160px',
-                    marginRight:'15px'}}
-                    labelId="demo-simple-select-label"
-                    id="demo-simple-select"
-                    value={filterMethod}
-                    label="Метод фильтрации"
-                    onChange={handleChangeFilterMethod}
-                    disabled={!filterBy ? true : false}
-                  >
-                    
-                    {filterBy === 'Date' ?<MenuItem value={'Interval'}>Промежуток</MenuItem>:''}
-                    {filterBy === 'level' ?  
-                    [
-                    <MenuItem key={1} value={'More'}>Больше</MenuItem>,
-                    <MenuItem  key={2} value={'Less'}>Меньше</MenuItem>,
-                    <MenuItem  key={3} value={'Equals'}>Равно</MenuItem>,
-                    <MenuItem  key={4} value={'NotEqual'}>Не равно</MenuItem>
-                    ]
-                     : ''}
-                  </Select>
-              </Box>
-        {filterMethod === 'Interval' ? 
+        {filterBy === 'Date' ? 
             <>
                     <TextField
                       id="datetime-local"
@@ -366,36 +371,34 @@ export function TableEventLog() {
       }
       {filterBy === 'level' ?
                  <Box>
-                    <InputLabel id="demo-simple-select-label">Значение</InputLabel>
+                    <InputLabel id="demo-multiple-checkbox-label">Значение</InputLabel>
                     <Select 
                     sx={{height:'56px',
                           width:'200px',
                           marginRight:'15px'}}
-                    labelId="demo-simple-select-label"
-                    id="demo-simple-select"
+                    labelId="demo-multiple-checkbox-label"
+                    id="demo-multiple-checkbox"
+                    multiple
                     value={filterValue}
                     label="Метод фильтрации"
                     onChange={handleChangeFilterValue}
-                    disabled={!filterMethod ? true : false}
+                    input={<OutlinedInput label="Значение" />}
+                    renderValue={(selected) =>  selected.map((el:any)=>iconImages[el-1])}
                     >
-                      <MenuItem value={'1'}>
-                        <Box sx={{display:'flex',
-                                  alignItems:'center'}}>
-                          <Box sx={{marginRight:'5px'}} >{iconImages[0]}</Box> <Box>Ошибка</Box>
-                        </Box>
-                      </MenuItem>
-                      <MenuItem value={'2'}>
-                        <Box sx={{display:'flex',
-                                  alignItems:'center'}}>
-                          <Box  sx={{marginRight:'5px'}}>{iconImages[1]}</Box> <Box>Предупреждение</Box>
+                      {
+                        levels.map((el,index:any)=>(
+                          <MenuItem 
+                          value={index+1}
+                          key={index+1}
+                          >
+                          <Checkbox checked={filterValue.indexOf(index+1) > -1} />
+                          <Box sx={{display:'flex',
+                                    alignItems:'center'}}>
+                            <Box sx={{marginRight:'5px'}} >{iconImages[index]}</Box> <Box>{el}</Box>
                           </Box>
-                      </MenuItem>
-                      <MenuItem value={'3'}>
-                        <Box sx={{display:'flex',
-                                  alignItems:'center'}}>
-                          <Box sx={{marginRight:'5px'}}>{iconImages[2]}</Box> <Box>Уведомление</Box>
-                        </Box>
-                      </MenuItem>
+                        </MenuItem>
+                        ))
+                      }
                     </Select>
                   </Box> : ''}
       <Button 
@@ -403,38 +406,45 @@ export function TableEventLog() {
         variant="outlined"  
         color="success"
         onClick={filterByMethod}
-        disabled = {filterValue || dateStart || dateEnd ? false : true}>
+        // eslint-disable-next-line no-mixed-operators
+        disabled = {filterBy === 'Date' ? (dateStart || dateEnd  ? false : true):
+        filterBy === 'level' ? (filterValue.length ? false : true):true
+       }>
         Применить
       </Button>
       <Button 
         sx={{marginRight:'15px'}}
-        disabled={!filterBy ? true : false}
-        variant="outlined" color="error"  onClick={filterClear}>
+        variant="outlined" color="error"  onClick={()=>{
+          setShowFilter(false);
+          filterClear();
+          }}>
         Отменить
        </Button>
-       <Button 
+      <Button 
         sx={{marginRight:'15px'}}
-        disabled = {filterValue || dateStart || dateEnd ? false : true}
-        variant="outlined">
-        Добавить
+        disabled={!arrayFilters.length ? true : false}
+        variant="outlined"  onClick={()=>{
+          setArrayFilters([]);
+          filterClear();
+          setShowFilter(false);
+          setTableElements(filters(rows.data,[]));
+          }}>
+        Очистить
        </Button>
-       
           </Box>
            : ''
         }
-     
         <Table 
           stickyHeader aria-label="sticky table"
           size="small"
         >
-          
           <SortTalbeHead
             order={order}
             orderBy={orderBy}
             onRequestSort={handleRequestSort}
           />
           <TableBody>
-            {rows.data
+            {tableElements
               .sort(getComparator(order, orderBy))
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((row) => {
@@ -465,7 +475,7 @@ export function TableEventLog() {
       <TablePagination
         rowsPerPageOptions={[10, 25, 100]}
         component='div'
-        count={rows.data.length}
+        count={tableElements.length}
         rowsPerPage={rowsPerPage}
         page={page}
         onPageChange={handleChangePage}
